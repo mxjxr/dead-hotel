@@ -235,7 +235,7 @@ for(const ev of ['dblclick','gesturestart','gesturechange','gestureend','selects
 
 (()=>{'use strict';
 const $=s=>document.querySelector(s);
-const VERSION='1.3';   // à changer à chaque mise à jour publiée
+const VERSION='1.4';   // à changer à chaque mise à jour publiée
 const cv=$('#c'), ctx=cv.getContext('2d');
 const wrap=$('#wrap');
 const T=16, TAU=Math.PI*2;
@@ -294,7 +294,6 @@ const S={
   pistol(){if(can('shot',50)){tone(900,.07,'square',.05,220);noise(.04,.05,3000,'highpass');}},
   shotgun(){if(can('shot',50)){noise(.2,.22,1800,'lowpass',0,250);tone(150,.12,'square',.07,55);}},
   smg(){if(can('shot',75)){tone(1250,.04,'square',.035,500);noise(.03,.035,4000,'highpass');}},
-  laser(){if(can('shot',60)){tone(1700,.18,'sawtooth',.06,140);}},
   turret(){if(can('tur',90)){tone(700,.05,'square',.03,300);noise(.03,.03,3500,'highpass');}},
   flame(){if(can('flm',140)) noise(.18,.06,900,'bandpass',0,400);},
   zap(){tone(1800,.15,'sawtooth',.05,300); noise(.12,.06,5000,'highpass');},
@@ -350,8 +349,7 @@ function vib(p){
 const WP={
   pistol:{name:'Pistolet',desc:'Fiable et précis',dmg:10,rate:2.6,range:135,spd:280,n:1,spread:.05,gun:'#8a8f98',price:0},
   shotgun:{name:'Fusil à pompe',desc:'Gerbe de plombs, dévastateur de près',dmg:7,rate:1.15,range:100,spd:260,n:6,spread:.55,gun:'#6b4426',price:35},
-  smg:{name:'Mitraillette',desc:'Rafales ultra rapides',dmg:5,rate:9,range:125,spd:320,n:1,spread:.16,gun:'#3a3f47',price:50},
-  laser:{name:'Laser',desc:'Rayon qui transperce tous les zombies',dmg:16,rate:2.3,range:170,laser:true,gun:'#c02030',price:80}
+  smg:{name:'Mitraillette',desc:'Rafales ultra rapides',dmg:5,rate:9,range:125,spd:320,n:1,spread:.16,gun:'#3a3f47',price:50}
 };
 const ZT={
   normal:{r:6,hp:15,spd:27,dmg:7,coin:1,kb:1,tpl:'Z'},
@@ -559,7 +557,7 @@ function blob(g,x,y,r,dark){
 /* ================= État ================= */
 let state='title';   // title | play | shop | pause | ask | build | dying | over
 let G=null, P=null, L=null;
-let zombies=[], bullets=[], eshots=[], coins=[], parts=[], gibs=[], beams=[], rings=[], pools=[], flashes=[], arcs=[];
+let zombies=[], bullets=[], eshots=[], coins=[], parts=[], gibs=[], rings=[], pools=[], flashes=[], arcs=[];
 let props=[], defs=[], defGrid=null;
 let W=0,H=0,DPR=1,PS=4,GW=160,GH=320,mmY=60;
 const demo={x:0,y:0,t:0}, cam={x:0,y:0};
@@ -1305,7 +1303,7 @@ function spawnAtTile(i,type,f){
 }
 
 /* ================= Déroulement : base ⇄ étages ================= */
-function clearTransient(){bullets=[]; eshots=[]; parts=[]; gibs=[]; beams=[]; rings=[]; pools=[]; flashes=[]; arcs=[];}
+function clearTransient(){bullets=[]; eshots=[]; parts=[]; gibs=[]; rings=[]; pools=[]; flashes=[]; arcs=[];}
 function clearWorld(){zombies=[]; coins=[]; clearTransient();}
 function snapshot(){
   return {MW,MH,map,roomOf,seen,bgrid,BGW,L,floorCv,wallCv,fdec,wdec,fctx,wctx,mmCv,mmCtx,zombies,coins,props,defs,defGrid,
@@ -1481,23 +1479,11 @@ function fire(t){
   const dmg=w.dmg*P.dmgMul*(1+.3*(P.wlvl-1));
   const mx=P.x+Math.cos(a)*7, my=P.y+Math.sin(a)*7;
   flashes.push({x:mx,y:my,r:22,t:.06,max:.06,col:'#ffd890',muzzle:true});
-  if(w.laser){laserShot(mx,my,a,w.range,dmg); S.laser(); return;}
   for(let i=0;i<w.n;i++){
     const aa=a+(w.n>1?(i/(w.n-1)-.5)*w.spread+rnd(-.05,.05):rnd(-w.spread,w.spread)*.5);
     bullets.push({x:mx,y:my,vx:Math.cos(aa)*w.spd,vy:Math.sin(aa)*w.spd,life:w.range/w.spd*rnd(.9,1.05),dmg});
   }
   S[P.weapon]();
-}
-function laserShot(x,y,a,range,dmg){
-  const cx=Math.cos(a), cy=Math.sin(a); let len=0;
-  while(len<range){len+=2; if(wallAt(x+cx*len,y+cy*len)) break;}
-  beams.push({x1:x,y1:y,x2:x+cx*len,y2:y+cy*len,t:.13,max:.13});
-  for(const z of zombies){
-    if(z.dead) continue;
-    const px=z.x-x, py=z.y-y, pr=px*cx+py*cy;
-    if(pr<0||pr>len) continue;
-    if(Math.abs(px*cy-py*cx)<z.r+2) damage(z,dmg,cx*35,cy*35);
-  }
 }
 function spit(z,a,spd,dmg,col){
   eshots.push({x:z.x+Math.cos(a)*z.r,y:z.y+Math.sin(a)*z.r,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,life:2.6,dmg,r:2.5,col});
@@ -2059,7 +2045,6 @@ function update(dt){
     if(r-pl.r>=1||pl.t<dt*1.5){pl.r=r; fctx.fillStyle='#5c0a0e'; disc(fctx,pl.x,pl.y,r); fctx.fillStyle='#6e0b10'; disc(fctx,pl.x-.5,pl.y-.5,r*.7); if(r>3){fctx.fillStyle='#7a0c12'; disc(fctx,pl.x-1,pl.y-1,r*.35);} markBlood(pl.x,pl.y,r);}
   }
   pools=pools.filter(pl=>pl.r<pl.R&&pl.t<2);
-  for(const b of beams) b.t-=dt; beams=beams.filter(b=>b.t>0);
   for(const a of arcs) a.t-=dt; arcs=arcs.filter(a=>a.t>0);
   for(const r of rings){r.t-=dt; r.r=r.R*(1-r.t/r.max);} rings=rings.filter(r=>r.t>0);
   for(const f of flashes) f.t-=dt; flashes=flashes.filter(f=>f.t>0);
@@ -2633,11 +2618,6 @@ function render(){
     g.fillStyle='#ffb040'; g.fillRect(Math.round(b.x-ux*2),Math.round(b.y-uy*2),1,1);
     g.fillStyle='#a05010'; g.fillRect(Math.round(b.x-ux*4),Math.round(b.y-uy*4),1,1);
   }
-  for(const b of beams){
-    const a=b.t/b.max;
-    g.fillStyle=a>.5?'#ffffff':'#ff3040'; line(g,b.x1,b.y1,b.x2,b.y2);
-    if(a>.4){g.fillStyle='rgba(255,40,60,.5)'; line(g,b.x1+1,b.y1,b.x2+1,b.y2); line(g,b.x1,b.y1+1,b.x2,b.y2+1);}
-  }
   for(const a of arcs){
     g.fillStyle=a.t/a.max>.5?'#ffffff':'#9ff4ff';
     for(let k=0;k<a.pts.length-1;k++){
@@ -3005,6 +2985,8 @@ async function loadRun(){
   clearTransient(); flow=new Uint16Array(MW*MH); Q=new Int32Array(MW*MH); flowTile=-1;
   if(G.fade){if(!G.fade.done){P.x=G.fade.to.x; P.y=G.fade.to.y;} G.fade=null;}
   G.ctx=null; G.sblood=[]; G.shake=0; G.hurtFlash=0; P.inv=Math.max(P.inv,1.5);
+  if(!WP[P.weapon]) P.weapon='smg';   // arme retirée du jeu (Laser)
+  for(const o of [G,G.savedFloor]) if(o&&o.offers&&o.offers.some(f=>f.kind==='weapon'&&!WP[f.key])) o.offers=null;
   joyReset(); refreshPowers(); recalcDmg(); updateFlow();
   $('#build').classList.remove('show'); showHUD(true); updateHUD(true);
   state='pause'; syncToggles(); showOnly('#pause'); updateButtons(); last=performance.now();
