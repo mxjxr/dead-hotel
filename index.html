@@ -235,7 +235,7 @@ for(const ev of ['dblclick','gesturestart','gesturechange','gestureend','selects
 
 (()=>{'use strict';
 const $=s=>document.querySelector(s);
-const VERSION='1.2';   // à changer à chaque mise à jour publiée
+const VERSION='1.3';   // à changer à chaque mise à jour publiée
 const cv=$('#c'), ctx=cv.getContext('2d');
 const wrap=$('#wrap');
 const T=16, TAU=Math.PI*2;
@@ -702,8 +702,8 @@ function tryGen(f){
     loot.push({x:(kr.x+kr.w/2)*T+ri(-6,6),y:(kr.y+kr.h/2)*T+ri(-2,6),kind:'key'});
   }
   for(const r of rooms){
-    if(r.kind==='bed'&&!r.merch&&!r.locked&&Math.random()<.28) loot.push({x:(r.left?r.x+1:r.x+r.w-1)*T,y:(r.y+r.h-1)*T+4,kind:Math.random()<.3?'medkit':'crate'});
-    if(r.kind==='service'&&Math.random()<.7) loot.push({x:(r.x+r.w/2)*T+ri(-20,20),y:(r.y+r.h-1)*T+4,kind:Math.random()<.25?'medkit':'crate'});
+    if(r.kind==='bed'&&!r.merch&&!r.locked&&Math.random()<.28) loot.push({x:(r.left?r.x+1:r.x+r.w-1)*T,y:(r.y+r.h-1)*T+4,kind:'crate'});
+    if(r.kind==='service'&&Math.random()<.7) loot.push({x:(r.x+r.w/2)*T+ri(-20,20),y:(r.y+r.h-1)*T+4,kind:'crate'});
   }
   // ventilation vers la pièce secrète
   if(secret){
@@ -717,7 +717,7 @@ function tryGen(f){
       const [cx,wx,yy]=pick(cand), bx=secret.x+ri(1,secret.w-2);
       vents.push({a:{gx:wx,gy:yy,x:cx*T+8,y:yy*T+8},b:{gx:bx,gy:secret.y-1,x:bx*T+8,y:secret.y*T+6}});
       loot.push({x:(secret.x+1)*T,y:(secret.y+2)*T+2,kind:'crate',big:true});
-      loot.push({x:(secret.x+secret.w-1)*T,y:(secret.y+2)*T+4,kind:Math.random()<.5?'crate':'medkit',big:true});
+      loot.push({x:(secret.x+secret.w-1)*T,y:(secret.y+2)*T+4,kind:'crate',big:true});
       lights.push({x:(secret.x+secret.w/2)*T,y:(secret.y+1.5)*T,r:20,kind:'lamp',flick:2,seed:rnd(0,99)});
     }else{rooms.splice(rooms.indexOf(secret),1); fill(secret.x,secret.y,secret.x+secret.w-1,secret.y+2,0); secret=null;}
   }
@@ -1318,7 +1318,7 @@ function restore(s){
 }
 function newGame(){
   dropRun();
-  P={x:0,y:0,r:5,hp:100,maxHp:100,spd:72,dmgMul:1,rateMul:1,magnet:22,coins:0,weapon:'pistol',wlvl:1,
+  P={x:0,y:0,r:5,hp:100,maxHp:100,spd:80,dmgMul:1,rateMul:1,magnet:22,coins:0,weapon:'pistol',wlvl:1,
      inv:0,face:-Math.PI/2,mvx:0,mvy:-1,fireCd:0,shieldT:0,dashT:0,dvx:0,dvy:0,shopArm:true,walk:0,steps:0,stepD:0,stepSide:1,stairArm:false,
      up:{hp:0,dmg:0,rate:0,spd:0,mag:0},pw:{shield:0,wave:0,dash:0},pcd:{shield:0,wave:0,dash:0}};
   G={floor:1,maxFloor:1,place:'base',time:0,kills:0,earned:0,scrap:12,key:false,waveNo:0,wave:null,shake:0,hurtFlash:0,banner:null,
@@ -1339,11 +1339,10 @@ function newFloor(f){
   genLevel(f); buildCanvases(); clearWorld();
   props=L.propsInit.map(p=>Object.assign({},p)); defs=[]; defGrid=null;
   P.x=L.spawn.x; P.y=L.spawn.y; P.inv=1; P.shopArm=true; P.shieldT=0; P.dashT=0; P.steps=0; P.face=-Math.PI/2; P.stairArm=false;
-  if(f>1) P.hp=Math.min(P.maxHp,P.hp+Math.round(P.maxHp*.1));
   G.offers=null; G.boss=null; G.sblood=[];
   // des zombies dans les chambres (coincés derrière les portes) et dans le couloir
   for(const r of L.rooms){
-    if(r.merch) continue;
+    if(r.merch||(r.parent&&r.parent.merch)) continue;   // la suite du marchand reste vide
     const n=r.kind==='bed'?(Math.random()<.78?ri(1,3):0):r.kind==='bath'?(Math.random()<.3?1:0):r.kind==='service'?(Math.random()<.65?ri(1,2):0):0;
     for(let k=0;k<n;k++){const tx=r.x+ri(0,r.w-1), ty=r.y+ri(0,r.h-1); spawnAtTile(ty*MW+tx,pickType(f),f);}
   }
@@ -1358,7 +1357,7 @@ function newFloor(f){
     zombies.push(b); G.boss=b;
     sub='BOSS : '+B.name;
   }
-  G.spawnT=4; G.budget=6+3*f;
+  G.spawnT=4; G.budget=6+3*f; G.hordeT=rnd(16,22); G.ventT=rnd(8,14);
   flowTile=-1; updateFlow();
   G.banner={t:2.8,text:'ETAGE '+f,sub,boss:f%5===0};
   updateHUD(true); soonSave();
@@ -1370,9 +1369,10 @@ function goToBase(){
   clearTransient();
   P.x=L.arrive.x; P.y=L.arrive.y; P.stairArm=false; P.inv=1; P.shieldT=0; P.dashT=0; P.steps=0;
   for(const d of defs) d.hp=d.max;
-  if(G.furn.cot) P.hp=P.maxHp;
+  const h0=P.hp; P.hp=G.furn.cot?P.maxHp:Math.min(P.maxHp,P.hp+Math.round(P.maxHp*.5));   // on ne se soigne qu'à la base
+  if(P.hp>h0) setTimeout(()=>toast('SOINS : +'+Math.round(P.hp-h0)+' PV'),700);
   if(G.furn.steeldoor&&!defs.some(d=>d.type==='steeldoor')){const dd=L.baseRoom.door, sd=placeDef('steeldoor',dd.x,dd.y); sd.solid=false; sd.zOnly=true; sd.hp=sd.max=600;}
-  if(G.furn.chest){G.scrap+=4; setTimeout(()=>toast('COFFRE : +4 FERRAILLE'),900);}
+  if(G.furn.chest){G.scrap+=4; setTimeout(()=>toast('COFFRE : +4 FERRAILLE'),2600);}
   startWave();
   flowTile=-1; updateFlow();
   G.banner={t:2.8,text:'RECEPTION',sub:'LA HORDE ARRIVE ! PREPARE-TOI'};
@@ -1401,7 +1401,7 @@ function hurtPlayer(dmg,fx,fy){
   if(P.hp<=0){P.hp=0; die();}
 }
 function damage(z,amt,kx,ky){
-  if(z.dead) return;
+  if(z.dead||z.drop>0) return;
   z.hp-=amt; z.flash=.08; z.hunter=true;
   if(!z.aggro){z.aggro=true; if(z.type==='boss') bossWake(z);}
   const kr=ZT[z.type].kb; z.kx+=kx*kr; z.ky+=ky*kr;
@@ -1412,7 +1412,7 @@ function damage(z,amt,kx,ky){
   if(z.hp<=0) kill(z,kx/kl,ky/kl);
 }
 function dot(z,amt){
-  if(z.dead) return;
+  if(z.dead||z.drop>0) return;
   z.hp-=amt; z.aggro=true; if(Math.random()<.15) z.flash=.04;
   if(Math.random()<.08) spray(z.x,z.y,2,0,0,.5);
   if(z.hp<=0) kill(z);
@@ -1433,8 +1433,8 @@ function kill(z,dx=0,dy=0){
   S.kill(); S.splat(); vib(z.type==='boss'?150:14);
   if(z.type==='boom') explode(z.x,z.y,38,z.dmg,50*hpMul(G.maxFloor),z);
   if(z.type==='boss'){
-    G.bossKills=(G.bossKills||0)+1; G.shake=10; S.roar(); P.hp=Math.min(P.maxHp,P.hp+30);
-    G.banner={t:2.4,text:'BOSS ELIMINE',sub:'+30 PV  +8 FERRAILLE'}; G.scrap+=8;
+    G.bossKills=(G.bossKills||0)+1; G.shake=10; S.roar();
+    G.banner={t:2.4,text:'BOSS ELIMINE',sub:'+8 FERRAILLE'}; G.scrap+=8;
     for(let k=1;k<7;k++) setTimeout(()=>{if(state==='play'||state==='shop'){spray(z.x+rnd(-12,12),z.y+rnd(-12,12),20,0,0,1.3); S.splat();}},k*110);
   }
 }
@@ -1551,14 +1551,13 @@ function refreshPowers(){
 /* ================= Boutique ================= */
 function makeOffers(){
   const f=G.floor, pm=1+.12*(f-1), out=[];
-  out.push({kind:'heal',icon:'heal',name:'Trousse de soin',desc:'Rend 40 PV',price:Math.round(10*pm)});
   if(Math.random()<.35&&P.wlvl<5){
     out.push({kind:'wup',icon:'gun',name:WP[P.weapon].name+' niv. '+(P.wlvl+1),desc:'+30 % de dégâts pour ton arme',price:Math.round(30*Math.pow(1.4,P.wlvl-1)*pm)});
   }else{
     const k=pick(Object.keys(WP).filter(x=>x!==P.weapon));
     out.push({kind:'weapon',key:k,icon:'gun',name:WP[k].name,desc:WP[k].desc+' (remplace ton arme)',price:Math.round(WP[k].price*pm)});
   }
-  for(const k of shuffle(Object.keys(UPG).filter(x=>P.up[x]<UPG[x].max)).slice(0,2)){
+  for(const k of shuffle(Object.keys(UPG).filter(x=>P.up[x]<UPG[x].max)).slice(0,3)){
     out.push({kind:'up',key:k,icon:UPG[k].icon,name:UPG[k].name+' niv. '+(P.up[k]+1),desc:UPG[k].desc,price:Math.round(14*Math.pow(1.35,P.up[k])*pm)});
   }
   const pws=Object.keys(PW).filter(x=>P.pw[x]<5);
@@ -1612,24 +1611,24 @@ function closeShop(){if(state!=='shop') return; state='play'; showOnly(null); la
 
 /* ================= Base : vagues, générateur, défenses ================= */
 const defScale=()=>1+.2*(G.maxFloor-1);
-function startWave(){G.wave={state:'prep',t:15,n:G.waveNo+1,queue:Math.min(100,10+5*G.maxFloor+3*G.waveNo),spawnT:0};}
+function startWave(){G.wave={state:'prep',t:5,n:G.waveNo+1,queue:Math.min(100,10+5*G.maxFloor+3*G.waveNo),spawnT:0};}
 function launchWave(){const w=G.wave; w.state='fight'; G.banner={t:2.2,text:'VAGUE '+w.n,sub:w.queue+' ZOMBIES'}; S.roar(); vib(80);}
 function updWave(dt){
   const w=G.wave; if(!w||w.state==='done') return;
   if(w.state==='prep'){w.t-=dt; if(w.t<=0) launchWave(); return;}
   w.spawnT-=dt;
   if(w.queue>0&&w.spawnT<=0){
-    const k=Math.min(w.queue,ri(1,3));
+    const k=Math.min(w.queue,ri(2,4));
     for(let i=0;i<k;i++){const z=spawnAtTile(pick(L.waveSpawns),pickType(G.maxFloor),G.maxFloor); z.wave=true; z.aggro=true; z.hunter=true;}
-    w.queue-=k; w.spawnT=rnd(.4,.9);
+    w.queue-=k; w.spawnT=rnd(.25,.6);
   }
   if(w.queue===0&&!zombies.some(z=>z.wave&&!z.dead)) waveCleared();
 }
 function waveCleared(){
   const w=G.wave; w.state='done'; G.waveNo++;
   const c=Math.round(8+4*G.maxFloor), s=3+G.maxFloor;
-  P.coins+=c; G.earned+=c; G.scrap+=s; P.hp=Math.min(P.maxHp,P.hp+Math.round(P.maxHp*.5));
-  G.banner={t:3,text:'VAGUE REPOUSSEE',sub:`+${c} PIECES  +${s} FERRAILLE  +PV`}; S.buy(); vib(40);
+  P.coins+=c; G.earned+=c; G.scrap+=s; P.hp=P.maxHp;
+  G.banner={t:3,text:'VAGUE REPOUSSEE',sub:`+${c} PIECES  +${s} FERRAILLE  PV AU MAX`}; S.buy(); vib(40);
 }
 function hurtGen(dmg){
   const g=L.gen; if(!g||g.hp<=0||state!=='play') return;
@@ -1646,7 +1645,7 @@ function baseFall(){
 function explodeFx(x,y){S.boom(); G.shake=8; sparks(x,y,'#ff9a20',30,1.8); sparks(x,y,'#7affd8',16,1.4); flashes.push({x,y,r:60,t:.3,max:.3,col:'#ff9a40'}); fctx.fillStyle='rgba(10,6,4,.6)'; disc(fctx,x,y,12);}
 function nearestZ(x,y,range){
   let best=null, bd=range*range;
-  for(const z of zombies){if(z.dead) continue; const dx=z.x-x, dy=z.y-y, d=dx*dx+dy*dy; if(d<bd&&los(x,y,z.x,z.y)){bd=d; best=z;}}
+  for(const z of zombies){if(z.dead||z.drop>0) continue; const dx=z.x-x, dy=z.y-y, d=dx*dx+dy*dy; if(d<bd&&los(x,y,z.x,z.y)){bd=d; best=z;}}
   return best;
 }
 function placeDef(type,tx,ty){
@@ -1779,6 +1778,7 @@ let askCb=null;
 function ask(txt,cb){state='ask'; askCb=cb; $('#askTxt').textContent=txt; joyReset(); showOnly('#ask');}
 function openLoot(it){
   it.open=true;
+  if(it.kind==='medkit'&&L.kind!=='base') it.kind='crate';   // plus de soin dans l'hôtel
   const cm=coinMul(G.maxFloor);
   if(it.kind==='crate'){
     S.crate(); debris(it.x,it.y,'#7a5230',8);
@@ -1931,7 +1931,7 @@ function update(dt){
       b.x+=b.vx*dt/steps; b.y+=b.vy*dt/steps;
       if(wallAt(b.x,b.y)){b.life=0; sparks(b.x-b.vx*dt/steps,b.y-b.vy*dt/steps,'#ffd890',3); break;}
       for(const z of zombies){
-        if(z.dead) continue;
+        if(z.dead||z.drop>0) continue;
         const dx=z.x-b.x, dy=z.y-b.y;
         if(dx*dx+dy*dy<(z.r+1.5)*(z.r+1.5)){
           const sp=Math.hypot(b.vx,b.vy);
@@ -1992,6 +1992,13 @@ function update(dt){
         }
       }
     }
+  }
+  /* --- hordes, zombies qui tombent des ventilations, portes défoncées --- */
+  if(alive&&!base){
+    if(G.hordeT==null){G.hordeT=rnd(16,22); G.ventT=rnd(8,14);}
+    G.hordeT-=dt; if(G.hordeT<=0) G.hordeT=horde()?Math.max(18,32-G.floor)*rnd(.85,1.15):6;
+    G.ventT-=dt; if(G.ventT<=0) G.ventT=ventDrop()?rnd(13,22):4;
+    doorBreaks(dt);
   }
 
   /* --- pièces et ferraille --- */
@@ -2106,6 +2113,58 @@ function stepPrints(e,ox,oy,max){
   if(Math.abs(c)>Math.abs(sn)){fctx.fillRect(x-1,y,3,2); fctx.fillStyle='#3e0608'; fctx.fillRect(c>0?x+1:x-1,y,1,2);}
   else{fctx.fillRect(x,y-1,2,3); fctx.fillStyle='#3e0608'; fctx.fillRect(x,sn>0?y+1:y-1,2,1);}
 }
+const zCap=()=>Math.min(40+G.floor,70);
+// une horde arrive par le haut de l'étage, juste hors de l'écran, et fonce sur toi
+function horde(){
+  if(zombies.length>zCap()-4) return false;
+  const ty0=Math.floor((P.y-GH/2)/T)-2, tiles=[];
+  for(let ty=ty0-4;ty<=ty0;ty++) for(let tx=C0;tx<=C1;tx++){const i=ty*MW+tx; if(ty>0&&map[i]===1&&flow[i]<9999) tiles.push(i);}
+  if(tiles.length<4) return false;
+  const n=Math.min(4+G.floor,14,zCap()-zombies.length);
+  for(let k=0;k<n;k++){const z=spawnAtTile(pick(tiles),pickType(G.floor),G.floor); z.aggro=true; z.hunter=true;}
+  toast('UNE HORDE DESCEND !'); S.groan(); setTimeout(()=>S.groan(),280); vib([30,40,30]);
+  return true;
+}
+// un zombie tombe du plafond, devant toi, dans un couloir (jamais dans une chambre ni la boutique)
+function ventDrop(){
+  if(zombies.length>=zCap()) return false;
+  const pty=Math.floor(P.y/T), ptx=Math.floor(P.x/T), c=[];
+  for(let ty=pty-6;ty<=pty-2;ty++) for(let tx=ptx-3;tx<=ptx+3;tx++){
+    if(tx<0||ty<0||tx>=MW||ty>=MH) continue;
+    const i=ty*MW+tx; if(map[i]===1) c.push(i);
+  }
+  if(!c.length) return false;
+  const n=G.floor>=4&&Math.random()<.4?2:1;
+  for(let k=0;k<n;k++){const z=spawnAtTile(pick(c),pickType(G.floor),G.floor); z.drop=.9+k*.3; z.aggro=true; z.hunter=true;}
+  S.crawl();
+  return true;
+}
+// zombies enfermés dans une chambre : quand tu passes devant, ils peuvent défoncer la porte
+function roomZombies(r){
+  const ids=[]; L.rooms.forEach((q,i)=>{if(q===r||q.parent===r) ids.push(i);});
+  return zombies.filter(z=>!z.dead&&ids.includes(roomOf[tileOf(z.x,z.y)]));
+}
+function doorBreaks(dt){
+  for(const d of L.doors){
+    if(d.state!=='closed'||!d.room||d.room.kind==='bath'||d.room.merch) continue;
+    const ti=d.y*MW+d.x; if(map[ti]!==14) continue;
+    const x=d.x*T+8, y=d.y*T+8;
+    if(d.bang>0){
+      const b0=d.bang; d.bang-=dt;
+      if(d.bang>0&&Math.floor(b0/.45)!==Math.floor(d.bang/.45)){S.kick(); G.shake=Math.max(G.shake,1.5); debris(x,y,'#6b4426',3); sparks(x,y,'#d8c8a0',3,.5);}
+      if(d.bang<=0){
+        map[ti]=3; d.state='broken'; paintDoorTile(floorCv.getContext('2d'),d);
+        S.crash(); vib(25); G.shake=Math.max(G.shake,3); flowTile=-1;
+        debris(x,y,'#6b4426',12); debris(x,y,'#8a5a32',5); sparks(x,y,'#d8c8a0',6,.8);
+        for(const z of roomZombies(d.room)){z.aggro=true; z.hunter=true;}
+      }
+      continue;
+    }
+    if(d.tried||Math.hypot(P.x-x,P.y-y)>44) continue;
+    d.tried=true;
+    if(Math.random()<.5&&roomZombies(d.room).length) d.bang=1.4;
+  }
+}
 function kickDoor(ti){
   map[ti]=3;
   const d=L.doors.find(d=>d.y*MW+d.x===ti);
@@ -2124,6 +2183,13 @@ function wallSplatAt(x,y){
 }
 
 function updZombie(z,dt){
+  if(z.drop>0){   // tombe d'une ventilation du plafond
+    const was=z.drop; z.drop-=dt;
+    if(z.drop>.5){if(Math.random()<dt*30) sparks(z.x+rnd(-5,5),z.y+rnd(-5,5),'#8a8a80',1,.25);}
+    else if(was>.5){debris(z.x,z.y,'#6a6e74',5); S.crawl();}
+    if(z.drop<=0){z.drop=0; z.stun=.35; S.kick(); S.splat(); vib(20); G.shake=Math.max(G.shake,2.5); sparks(z.x,z.y,'#9a9a90',12,.9); pool(z.x,z.y,1.5);}
+    return;
+  }
   z.flash-=dt; z.atkCd-=dt;
   if(z.burn>0){z.burn-=dt; dot(z,6*defScale()*dt); if(Math.random()<dt*12) addPart({k:'flame',x:z.x+rnd(-3,3),y:z.y+rnd(-3,3),z:0,vx:rnd(-8,8),vy:rnd(-25,-10),vz:0,col:pick(['#ffe060','#ff9a20']),sz:1,life:.3,max:.3}); if(z.dead) return;}
   const dx=P.x-z.x, dy=P.y-z.y, d=Math.hypot(dx,dy)||1;
@@ -2442,6 +2508,12 @@ function render(){
       continue;
     }
     const z=a, sc=z.type==='boss'?2:1, dir=angDir(z.ang), fr=Math.floor(z.walk/(4*sc))%2;
+    if(z.drop>0){
+      const k=z.drop>.5?1:z.drop/.5;
+      shadow(g,z.x,z.y,z.r*(1.1-.8*k));
+      if(z.drop<=.5) drawSprite(g,z.tpl,z.pal,z.key,0,dir,z.x,z.y-k*12,false,sc*(1+k));
+      continue;
+    }
     shadow(g,z.x,z.y,z.r*.9);
     const fl=z.flash>0||(z.fuse>0&&Math.floor(t*16)%2===0);
     const s=drawSprite(g,z.tpl,z.pal,z.key,fr,dir,z.x,z.y,fl,sc);
