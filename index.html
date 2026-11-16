@@ -68,6 +68,14 @@ img{image-rendering:pixelated;image-rendering:crisp-edges}
 #ctxBtn{left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 118px);padding:14px 16px;font-size:10px;align-items:center;justify-content:center;white-space:nowrap;background:#1f4a24;box-shadow:0 0 0 3px var(--ink),0 0 0 6px #8adf8a,inset 0 -5px 0 rgba(0,0,0,.4)}
 #toast{position:absolute;left:10px;right:10px;top:56%;text-align:center;font-family:var(--px);font-size:11px;line-height:1.5;color:#ffd8c8;text-shadow:2px 2px 0 #000;z-index:7;pointer-events:none;opacity:0;transition:opacity .25s}
 #toast.show{opacity:1}
+#upd{position:absolute;left:10px;right:94px;top:calc(env(safe-area-inset-top) + 84px);z-index:30;display:none;flex-direction:column;align-items:center;gap:8px;padding:9px 10px;background:rgba(18,8,9,.94);box-shadow:0 0 0 2px var(--ink),0 0 0 4px var(--frame);font-family:var(--px);font-size:8px;line-height:1.4;color:var(--cream);text-align:center;pointer-events:none}
+#upd.show{display:flex}
+#updBar{width:100%;height:6px;background:#2a1416;box-shadow:inset 0 0 0 1px #000}
+#updFill{height:100%;width:0;background:#c0161d;transition:width .2s}
+#updBtn{display:none;pointer-events:auto;min-width:0;font-size:10px;padding:10px 14px}
+#upd.ready #updBar{display:none}
+#upd.ready #updBtn{display:block}
+#verTxt{position:absolute;right:12px;bottom:calc(env(safe-area-inset-bottom) + 8px);margin:0;font-size:18px;color:var(--cream);opacity:.45}
 
 /* Écrans */
 .ov{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:calc(env(safe-area-inset-top) + 24px) 22px calc(env(safe-area-inset-bottom) + 24px);text-align:center;background:rgba(6,2,3,.9)}
@@ -148,6 +156,7 @@ h1{font-family:var(--px);font-size:22px;line-height:1.35;color:#e8383e;text-shad
   <button id="buildBtn" class="hbtn" aria-label="Construire"><img alt=""><span>BATIR</span></button>
   <button id="ctxBtn" class="hbtn"></button>
   <div id="toast"></div>
+  <div id="upd"><div id="updMsg"></div><div id="updBar"><div id="updFill"></div></div><button id="updBtn" class="btn">REDEMARRER</button></div>
 
   <div id="build">
     <div id="buildHead"><span id="buildScrap"><img alt=""><span id="buildNum">0</span></span><span id="buildHint">Touche le sol pour poser<br>Glisse pour regarder</span></div>
@@ -169,6 +178,7 @@ h1{font-family:var(--px);font-size:22px;line-height:1.35;color:#e8383e;text-shad
       <li>Monte les étages jusqu'à <b>EXIT</b></li>
       <li>Ramène de la ferraille et défends la réception</li>
     </ul>
+    <p id="verTxt"></p>
   </div>
 
   <div id="ask" class="ov">
@@ -207,6 +217,7 @@ for(const ev of ['dblclick','gesturestart','gesturechange','gestureend','selects
 
 (()=>{'use strict';
 const $=s=>document.querySelector(s);
+const VERSION='1.1';   // à changer à chaque mise à jour publiée
 const cv=$('#c'), ctx=cv.getContext('2d');
 const wrap=$('#wrap');
 const T=16, TAU=Math.PI*2;
@@ -2832,7 +2843,37 @@ window.__DH={get state(){return state;},get P(){return P;},get G(){return G;},ge
   give:n=>{P.coins+=n;},scrap:n=>{G.scrap+=n;},isWall:(x,y)=>wallAt(x,y),get map(){return map;},get MW(){return MW;},
   toBase:goToBase,toFloor:goToFloor,place:(t,x,y)=>{G.tool=t; tapBuild(x*T+8,y*T+8);},openBuild,closeBuild,ctx:()=>{if(G.ctx){const f=G.ctx.fn; G.ctx=null; f();}},
   yes:()=>$('#askYes').click(),furn:k=>buyFurn(k),get coins(){return coins;}};
+// ---------- mise à jour de l'appli installée : barre de téléchargement puis bouton Redémarrer ----------
+$('#verTxt').textContent='v'+VERSION;
+let updBusy=false, updReady=false;
+async function checkUpdate(){
+  if(updBusy||updReady||!navigator.onLine||!window.caches) return;
+  let ctl=null; try{ctl=navigator.serviceWorker.controller;}catch(e){}
+  if(!ctl) return;   // seulement dans l'appli (site avec mode hors ligne actif)
+  updBusy=true;
+  const box=$('#upd'), msg=$('#updMsg'), fill=$('#updFill');
+  try{
+    const j=await (await fetch('version.json?u='+Date.now(),{cache:'no-store'})).json();
+    if(!j.v||j.v===VERSION) return;
+    const show=p=>{fill.style.width=p+'%'; msg.textContent='MISE A JOUR v'+j.v+'\nTELECHARGEMENT '+p+'%';};
+    msg.style.whiteSpace='pre-line'; box.className='show'; show(0);
+    const res=await fetch('index.html?u='+Date.now(),{cache:'no-store'});
+    if(!res.ok) throw 0;
+    const rd=res.body.getReader(), parts=[]; let got=0;
+    for(;;){const {done,value}=await rd.read(); if(done) break; parts.push(value); got+=value.length; show(Math.min(99,Math.floor(got/j.size*100)));}
+    const blob=new Blob(parts,{type:'text/html'});
+    if(!(await blob.text()).includes("const VERSION='"+j.v+"'")) throw 0;   // fichier incomplet ou pas encore à jour : on réessaiera
+    const c=await caches.open('dead-hotel'), h={headers:{'Content-Type':'text/html; charset=utf-8'}};
+    await c.put('./',new Response(blob,h)); await c.put('./index.html',new Response(blob,h));
+    updReady=true; fill.style.width='100%'; box.className='show ready'; msg.textContent='MISE A JOUR v'+j.v+' PRETE !';
+  }catch(e){ if(!updReady) box.className=''; }
+  finally{ updBusy=false; }
+}
+$('#updBtn').addEventListener('click',()=>location.reload());
+setTimeout(checkUpdate,1500);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkUpdate(); });
 })();
+
 </script>
 </body>
 </html>
