@@ -308,7 +308,7 @@ const ACH={
   daily:{n:'DEFI RELEVE',d:'Réussir un défi du jour',r:20},
   allchars:{n:'TOUT LE MONDE',d:'Débloquer tous les personnages',r:20}
 };
-const VERSION='1.7';   // à changer à chaque mise à jour publiée
+const VERSION='1.8';   // à changer à chaque mise à jour publiée
 const cv=$('#c'), ctx=cv.getContext('2d');
 const wrap=$('#wrap');
 const T=16, TAU=Math.PI*2;
@@ -2352,6 +2352,8 @@ function update(dt){
     const m=Math.hypot(mx,my); if(m>1){mx/=m;my/=m;}
     if(G.fade){mx=0; my=0;}
     if(m>.1){P.mvx=mx; P.mvy=my; G.moved=true;}
+    if(P.lightA==null) P.lightA=P.face;
+    {let da=P.face-P.lightA; while(da>Math.PI) da-=TAU; while(da<-Math.PI) da+=TAU; P.lightA+=da*Math.min(1,dt*14);}
     const ox=P.x, oy=P.y;
     if(P.dashT>0){
       P.dashT-=dt; move(P,P.dvx*dt,P.dvy*dt);
@@ -2926,6 +2928,15 @@ function drawSprite(g,tpl,pal,key,frame,dir,x,y,flash,sc=1){
 }
 function shadow(g,x,y,r){g.fillStyle='rgba(0,0,0,.4)'; g.fillRect(sp(x-r),sp(y+r*.55),Math.round(r*2),2);}
 const LK=2;
+const TORCH_R=112, TORCH_H=.61;   // portée (≈ 3/4 de l'écran) et demi-angle (≈ 70° au total)
+function wedge(c,x,y,a,r,h){c.beginPath(); c.moveTo(x,y); c.arc(x,y,r,a-h,a+h); c.closePath(); c.fill();}
+// la lampe grésille pendant une panne ou quand un boss est réveillé tout près
+function torchI(t){
+  const boss=G&&G.boss&&!G.boss.dead&&G.boss.aggro&&Math.hypot(G.boss.x-P.x,G.boss.y-P.y)<220;
+  if(!(L.event==='blackout'||boss)) return 1;
+  const n=Math.sin(t*41)+Math.sin(t*23.7+1.3)+Math.sin(t*7.1);
+  return n>2.2?0:n>1.7?.35:1;
+}
 function hpBar(g,x,y,f,col){const w=12; g.fillStyle='#1a0505'; g.fillRect(sp(x-6),sp(y),w,2); g.fillStyle=col; g.fillRect(sp(x-6),sp(y),Math.max(1,Math.round(w*clamp(f,0,1))),2);}
 
 function drawDef(g,d,t){
@@ -3188,7 +3199,13 @@ function render(){
     lit.push([l,I]);
   }
   if(L.fire){let n=0; for(const i of L.fire.burn.keys()){if(n>30) break; const x=(i%MW)*T+8, y=((i/MW)|0)*T+8; if(x<cx-24||x>cx+GW+24||y<cy-24||y>cy+GH+24) continue; n++; const I=.6+.25*Math.sin(t*9+i); lg.globalAlpha=I; lg.drawImage(lightSprite(22),Math.round(x-22),Math.round(y-22)); lit.push([{x,y,r:22,kind:'fire'},I]);}}
-  if(P&&state!=='title'&&state!=='over'){lg.globalAlpha=1; const r=state==='dying'?40:L.event==='blackout'?58:70, lx=state==='build'?P.x:P.x; lg.drawImage(lightSprite(r),lsnap(lx-r),lsnap(P.y-r));}
+  // lampe torche : petit halo autour du perso + faisceau là où il regarde
+  let torch=0;
+  if(P&&state!=='title'&&state!=='over'){
+    const dying=state==='dying', halo=dying?40:black?26:32;
+    lg.globalAlpha=dying?1:.9; lg.drawImage(lightSprite(halo),lsnap(P.x-halo),lsnap(P.y-halo));
+    if(!dying){torch=torchI(t); if(torch>0){const a=P.lightA??P.face; lg.globalAlpha=torch; lg.fillStyle='rgba(0,0,0,.18)'; wedge(lg,P.x,P.y,a,TORCH_R*1.04,TORCH_H+.16); for(const [f,al] of [[1,.3],[.8,.45],[.6,.58],[.38,.75]]){lg.fillStyle=`rgba(0,0,0,${al})`; wedge(lg,P.x,P.y,a,TORCH_R*f,TORCH_H);}}}
+  }
   if(state==='build'){lg.globalAlpha=.85; lg.drawImage(lightSprite(90),lsnap(G.bcam.x-90),lsnap(G.bcam.y-90));}
   if(state==='title'){lg.globalAlpha=.8; lg.drawImage(lightSprite(80),lsnap(demo.x-80),lsnap(demo.y-80));}
   for(const f of flashes){const a=f.t/f.max; lg.globalAlpha=Math.min(1,a*1.2); lg.drawImage(lightSprite(f.r),lsnap(f.x-f.r),lsnap(f.y-f.r));}
@@ -3202,6 +3219,7 @@ function render(){
   for(const [l,I] of lit){
     g.globalAlpha=(l.kind==='ceil'||l.kind==='chand'?.2:l.kind==='moon'?.3:.35)*I; g.drawImage(tintSprite(l.r,LCOL[l.kind]||'#ffd890'),Math.round(l.x-l.r),Math.round(l.y-l.r));
   }
+  if(torch>0){g.globalAlpha=.07*torch; g.fillStyle='#fff0c0'; wedge(g,P.x,P.y,P.lightA??P.face,TORCH_R*.9,TORCH_H);}
   for(const f of flashes){const a=f.t/f.max; g.globalAlpha=.6*a; g.drawImage(tintSprite(f.r,f.col),Math.round(f.x-f.r),Math.round(f.y-f.r));}
   g.globalAlpha=1; g.globalCompositeOperation='source-over';
   for(const [l] of lit){
