@@ -156,6 +156,10 @@ h1{font-family:var(--px);font-size:22px;line-height:1.35;color:#e8383e;text-shad
 #buildHead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
 #buildScrap{font-family:var(--px);font-size:11px;color:#c8ccd4;display:flex;align-items:center;gap:6px;text-shadow:2px 2px 0 #000}
 #buildScrap img{width:14px;height:14px}
+#buildPow{font-family:var(--px);font-size:11px;color:#ffd060;display:flex;align-items:center;gap:6px;text-shadow:2px 2px 0 #000}
+#buildPow img{width:14px;height:14px}
+#buildPow.full{color:#ff6a4a}
+.tool .e{color:#ffd060}
 #buildHint{font-size:18px;color:#bfae92;line-height:1;text-align:right}
 #tools{display:flex;gap:14px;overflow-x:auto;padding:8px 6px 10px;-webkit-overflow-scrolling:touch}
 .tool{flex:none;width:78px;padding:7px 2px;background:#1e1414;border:none;box-shadow:0 0 0 3px var(--ink),0 0 0 5px #6a5a3a;color:var(--cream);font-family:var(--px);font-size:7px;line-height:1.5;display:flex;flex-direction:column;align-items:center;gap:4px}
@@ -193,7 +197,7 @@ h1{font-family:var(--px);font-size:22px;line-height:1.35;color:#e8383e;text-shad
   <div id="upd"><div id="updMsg"></div><div id="updBar"><div id="updFill"></div></div><button id="updBtn" class="btn">REDEMARRER</button></div>
 
   <div id="build">
-    <div id="buildHead"><span id="buildScrap"><img alt=""><span id="buildNum">0</span></span><span id="buildHint">Touche le sol pour poser<br>Glisse pour regarder</span></div>
+    <div id="buildHead"><span id="buildScrap"><img alt=""><span id="buildNum">0</span></span><span id="buildPow"><img alt=""><span id="powNum">0/2</span></span><span id="buildHint">Touche le sol<br>pour poser</span></div>
     <div id="tools"></div>
     <button id="buildDone" class="btn">FINI</button>
   </div>
@@ -308,7 +312,7 @@ const ACH={
   daily:{n:'DEFI RELEVE',d:'Réussir un défi du jour',r:20},
   allchars:{n:'TOUT LE MONDE',d:'Débloquer tous les personnages',r:20}
 };
-const VERSION='1.8';   // à changer à chaque mise à jour publiée
+const VERSION='1.9';   // à changer à chaque mise à jour publiée
 const cv=$('#c'), ctx=cv.getContext('2d');
 const wrap=$('#wrap');
 const T=16, TAU=Math.PI*2;
@@ -564,6 +568,7 @@ const FURN={
   steeldoor:{name:'PORTE BLINDEE',cost:10,desc:'Porte de la base : 600 PV'},
   solar:{name:'PANNEAUX SOLAIRES',cost:14,desc:'Le generateur se repare tout seul'}
 };
+const POWER={turret:1,flame:1,zap:1,mg:2,tesla:2};   // électricité consommée par défense
 const TOOLS=['barricade','spikes','mine','turret','flame','tesla','mg','zap','gen','solar','cot','chest','food','bench','armory','radio','steeldoor','remove'];
 const hpMul=f=>1+.25*(f-1)+.02*(f-1)*(f-1);
 const dmgMul=f=>1+.1*(f-1);
@@ -666,6 +671,7 @@ const ICONS={
   mg:['..k..k....','..g..g....','..g..g....','.kgkkgk...','kggggggk..','kgyyyygk..','kggggggkk.','.kkkkkkkbk','....kbbbbk','....kkkkk.'],
   zap:['c...c...c.','.c.c.c.c..','..c...c...','kkkkkkkkkk','kgkgkgkgkk','kkkkkkkkkk','kgkgkgkgkk','kkkkkkkkkk','kgkgkgkgkk','kkkkkkkkkk'],
   solar:['..y.......','.yyy......','..y.......','kkkkkkkkkk','kcckcckcck','kcckcckcck','kkkkkkkkkk','kcckcckcck','kkkkkkkkkk','....kk....'],
+  bolt:['.....yy...','....yy....','...yy.....','..yyyyyy..','.....yy...','....yy....','...yy.....','..yy......','.yy.......','..........'],
   remove:['rr......rr','rrr....rrr','.rrr..rrr.','..rrrrrr..','...rrrr...','...rrrr...','..rrrrrr..','.rrr..rrr.','rrr....rrr','rr......rr']
 };
 const iconURL={};
@@ -1802,10 +1808,15 @@ function goToBase(){
   const h0=P.hp; P.hp=G.furn.cot?P.maxHp:Math.min(P.maxHp,P.hp+Math.round(P.maxHp*.5));   // on ne se soigne qu'à la base
   const gain=Math.round(P.hp-h0); if(gain>0) setTimeout(()=>toast('SOINS : +'+gain+' PV'),700);
   if(G.furn.steeldoor&&!defs.some(d=>d.type==='steeldoor')){const dd=L.baseRoom.door, sd=placeDef('steeldoor',dd.x,dd.y); sd.solid=false; sd.zOnly=true; sd.hp=sd.max=600;}
+  // les survivants s'installent dans la salle de sécurité, autour du générateur
+  const SPOTS=[[5,9],[4,11],[6,11],[5,13],[7,9],[7,13],[3,14],[6,15],[4,16],[7,16]];
+  const freeSpot=()=>SPOTS.find(([x,y])=>{const i=y*MW+x; return !defGrid[i]&&buildable(i);});
+  for(const d of defs.filter(d=>d.type==='surv'&&L.rooms[roomOf[d.ty*MW+d.tx]]!==L.baseRoom)){
+    const sp_=freeSpot(); if(!sp_) break; defGrid[d.ty*MW+d.tx]=null; d.tx=sp_[0]; d.ty=sp_[1]; d.x=d.tx*T+8; d.y=d.ty*T+8; defGrid[d.ty*MW+d.tx]=d;
+  }
   const have=defs.filter(d=>d.type==='surv').length;
   for(let k=have;k<(G.survivors||0);k++){
-    const spot=[[12,10],[12,14],[13,8],[13,16],[14,11],[14,13],[15,9],[15,15]].find(([x,y])=>!defGrid[y*MW+x]&&map[y*MW+x]===7);
-    if(!spot) break; const pk=ri(0,CLIENTS.length-1), d=placeDef('surv',spot[0],spot[1]); d.pk=pk; d.pal=CLIENTS[pk];
+    const sp_=freeSpot(); if(!sp_) break; const pk=ri(0,CLIENTS.length-1), d=placeDef('surv',sp_[0],sp_[1]); d.pk=pk; d.pal=CLIENTS[pk];
   }
   if(G.furn.chest){G.scrap+=4; setTimeout(()=>toast('COFFRE : +4 FERRAILLE'),2600);}
   startWave();
@@ -2178,8 +2189,6 @@ function canBuild(tx,ty,type){
   if(defGrid[i]) return false;
   if(DEF[type].solid){
     const cx=tx*T+8, cy=ty*T+8;
-    if(Math.hypot(P.x-cx,P.y-cy)<14) return false;
-    for(const z of zombies) if(!z.dead&&Math.hypot(z.x-cx,z.y-cy)<z.r+8) return false;
     for(const p of props) if(Math.hypot(p.x-cx,p.y-cy)<p.r+8) return false;
   }
   return true;
@@ -2201,15 +2210,33 @@ function tapBuild(wx,wy){
   const D=DEF[t]; if(!D) return;
   if((t==='flame'||t==='tesla')&&!G.furn.bench){toast('IL FAUT UN ETABLI DANS LA BASE'); S.deny(); return;}
   if(G.scrap<D.cost){toast('PAS ASSEZ DE FERRAILLE'); S.deny(); return;}
+  if((POWER[t]||0)&&powUsed()+POWER[t]>powCap()){toast("PAS ASSEZ D'ELECTRICITE : AMELIORE LE GENERATEUR"); S.deny(); return;}
   if(!canBuild(tx,ty,t)){toast('IMPOSSIBLE ICI'); S.deny(); return;}
-  G.scrap-=D.cost; placeDef(t,tx,ty); S.build(); vib(15); sparks(tx*T+8,ty*T+8,'#ffd890',8,.8); renderTools();
+  G.scrap-=D.cost; placeDef(t,tx,ty); if(D.solid){bumpOut(P,tx,ty,false); for(const z of zombies) if(!z.dead) bumpOut(z,tx,ty,true);} S.build(); vib(15); sparks(tx*T+8,ty*T+8,'#ffd890',8,.8); renderTools();
+}
+// pousse une entité hors d'une case qui vient d'être bloquée, vers la case libre la plus proche
+function bumpOut(e,tx,ty,zomb){
+  const nx=clamp(e.x,tx*T,tx*T+T), ny=clamp(e.y,ty*T,ty*T+T);
+  if(Math.hypot(e.x-nx,e.y-ny)>=(e.cr||e.r)) return;
+  let ring=[[tx,ty]]; const seen=new Set([ty*MW+tx]);
+  for(let depth=0;depth<6&&ring.length;depth++){
+    const next=[], free=[];
+    for(const [x,y] of ring) for(const [dx,dy] of [[0,1],[1,0],[0,-1],[-1,0],[1,1],[-1,1],[1,-1],[-1,-1]]){
+      const X=x+dx, Y=y+dy, i=Y*MW+X; if(X<0||Y<0||X>=MW||Y>=MH||seen.has(i)) continue; seen.add(i);
+      if(!solidT(X,Y,zomb)) free.push([X,Y]); else next.push([X,Y]);
+    }
+    if(free.length){let b=free[0], bd=1e9; for(const [X,Y] of free){const d=Math.hypot(X*T+8-e.x,Y*T+8-e.y); if(d<bd){bd=d; b=[X,Y];}} e.x=b[0]*T+8; e.y=b[1]*T+8; return;}
+    ring=next;
+  }
 }
 function upgradeGen(){
   const c=genCost();
   if(G.scrap<c){toast('PAS ASSEZ DE FERRAILLE'); S.deny(); return;}
-  G.scrap-=c; L.gen.lvl++; L.gen.max+=100; L.gen.hp=L.gen.max; S.buy(); toast('GENERATEUR RENFORCE : '+L.gen.max+' PV'); renderTools();
+  G.scrap-=c; L.gen.lvl++; L.gen.max+=100; L.gen.hp=L.gen.max; S.buy(); toast('GENERATEUR NIV. '+L.gen.lvl+' : '+powCap()+' ELEC, '+L.gen.max+' PV'); renderTools();
 }
 const genCost=()=>10+5*L.gen.lvl;
+const powCap=()=>2+2*L.gen.lvl;   // 2 au départ, +2 par amélioration du générateur
+const powUsed=()=>defs.reduce((n,d)=>n+(d.dead?0:POWER[d.type]||0),0);
 function buyFurn(k){
   const F=FURN[k];
   if(G.furn[k]){toast(F.name+' : DEJA INSTALLE'); return;}
@@ -3076,7 +3103,7 @@ function render(){
   const mw=MW*T, mh=MH*T, t=performance.now()/1000;
   const tg=state==='build'?G.bcam:(state==='title'||!P)?demo:P;
   let cx=mw<=GW?(mw-GW)/2:clamp(tg.x-GW/2,0,mw-GW);
-  let cy=mh<=GH?(mh-GH)/2:clamp(tg.y-GH/2,0,mh-GH);
+  let cy=mh<=GH?(mh-GH)/2+(state==='build'?bOffY:0):clamp(tg.y-GH/2,0,mh-GH);
   if(G&&G.shake>0&&state!=='title'&&state!=='build'){cx+=rnd(-1,1)*G.shake; cy+=rnd(-1,1)*G.shake;}
   cx=Math.round(cx*PS)/PS; cy=Math.round(cy*PS)/PS;
   cam.x=cx; cam.y=cy;
@@ -3184,7 +3211,7 @@ function render(){
   const flash=G&&G.flashT>0&&(G.flashT>.38||(G.flashT<.26&&G.flashT>.16));
   const lg=lctx;
   lg.setTransform(1,0,0,1,0,0); lg.globalCompositeOperation='source-over'; lg.globalAlpha=1; lg.imageSmoothingEnabled=false;
-  lg.clearRect(0,0,SW*LK,SH*LK); lg.fillStyle=flash?'rgba(20,24,40,.6)':L.event==='blackout'?'rgba(2,1,4,.95)':'rgba(3,2,6,.88)'; lg.fillRect(0,0,SW*LK,SH*LK);
+  lg.clearRect(0,0,SW*LK,SH*LK); lg.fillStyle=flash?'rgba(20,24,40,.6)':state==='build'?'rgba(3,2,6,.45)':L.event==='blackout'?'rgba(2,1,4,.95)':'rgba(3,2,6,.88)'; lg.fillRect(0,0,SW*LK,SH*LK);
   lg.globalCompositeOperation='destination-out';
   lg.setTransform(LK,0,0,LK,-icx*LK,-icy*LK);
   const lsnap=v=>Math.round(v*LK)/LK;
@@ -3458,6 +3485,7 @@ document.querySelectorAll('.pw').forEach(b=>{
 });
 document.querySelectorAll('#coinTxt img,#shopCoins img').forEach(i=>i.src=iconURL.coin);
 document.querySelectorAll('#scrapTxt img,#buildScrap img').forEach(i=>i.src=iconURL.scrap);
+$('#buildPow img').src=iconURL.bolt;
 $('#keyIco').src=iconURL.key;
 $('#buildBtn img').src=iconURL.hammer;
 $('#buildBtn').addEventListener('pointerdown',e=>{e.preventDefault(); e.stopPropagation(); openBuild();});
@@ -3476,25 +3504,27 @@ addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 function openBuild(){
   if(state!=='play'||L.kind!=='base') return;
   state='build'; G.bcam={x:P.x,y:P.y}; joyReset(); renderTools();
-  $('#build').classList.add('show'); updateButtons();
+  $('#build').classList.add('show'); updateButtons(); resize();
 }
-function closeBuild(){if(state!=='build') return; state='play'; $('#build').classList.remove('show'); last=performance.now(); updateButtons();}
+function closeBuild(){if(state!=='build') return; state='play'; $('#build').classList.remove('show'); last=performance.now(); updateButtons(); resize();}
 function renderTools(){
   $('#buildNum').textContent=G.scrap;
+  const pu=powUsed(), pc=powCap(); $('#powNum').textContent=pu+'/'+pc; $('#buildPow').classList.toggle('full',pu>=pc);
   const box=$('#tools'); box.innerHTML='';
   for(const k of TOOLS){
     if(UNLOCK[k]&&!store.unl[k]) continue;
     const b=document.createElement('button'); b.className='tool';
     let name, cost;
     let note='';
-    if(k==='gen'){name='GENERATEUR +100'; cost=genCost();}
+    if(k==='gen'){name='GENERATEUR'; cost=genCost();}
     else if(k==='remove'){name='RETIRER'; cost=null; note='+50%';}
     else if(FURN[k]){name=FURN[k].name; cost=FURN[k].cost; if(G.furn[k]){note='INSTALLE'; cost=null;}}
     else{name=DEF[k].name; cost=DEF[k].cost; if((k==='flame'||k==='tesla')&&!G.furn.bench){note='ETABLI'; b.classList.add('poor');}}
     if(G.tool===k) b.classList.add('sel');
     if(cost!=null&&G.scrap<cost) b.classList.add('poor');
+    if(POWER[k]&&powUsed()+POWER[k]>powCap()) b.classList.add('poor');
     if(FURN[k]&&G.furn[k]) b.classList.add('poor');
-    b.innerHTML=`<img alt="" src="${iconURL[k==='gen'?'gen':k==='remove'?'remove':FURN[k]?k:DEF[k].icon]}"><span>${name}</span><span class="c">${note||cost+' FER.'}</span>`;
+    b.innerHTML=`<img alt="" src="${iconURL[k==='gen'?'gen':k==='remove'?'remove':FURN[k]?k:DEF[k].icon]}"><span>${name}</span><span class="c">${note||cost+' FER.'}</span>${k==='gen'?'<span class="e">+2 ELEC</span>':POWER[k]?'<span class="e">'+POWER[k]+' ELEC</span>':''}`;
     b.addEventListener('click',()=>{ if(k==='gen'){upgradeGen(); return;} if(FURN[k]){buyFurn(k); return;} G.tool=k; renderTools(); });
     box.appendChild(b);
   }
@@ -3606,13 +3636,20 @@ addEventListener('pagehide',()=>saveRun());
 setInterval(()=>{if(state==='play') saveRun();},15000);
 
 /* ================= Boucle ================= */
+let bOffY=0;
 function resize(){
   const r=wrap.getBoundingClientRect();
   DPR=window.devicePixelRatio||1;
   W=r.width; H=r.height;
   const dw=Math.round(W*DPR), dh=Math.round(H*DPR);
   cv.width=dw; cv.height=dh;
-  PS=Math.max(2,Math.round(dw/144));
+  PS=Math.max(2,Math.round(dw/144)); bOffY=0;
+  if(state==='build'&&L&&L.kind==='base'){
+    // vue d'ensemble : toute la base tient entre le HUD et le menu de construction
+    const pr=$('#pauseBtn').getBoundingClientRect(), hudH=pr.bottom-r.top+8, panH=$('#build').getBoundingClientRect().height;
+    PS=Math.min(dw/(MW*T+4),(dh-(hudH+panH)*DPR)/(MH*T+4));
+    bOffY=(panH-hudH)/2*DPR/PS;
+  }
   GW=Math.ceil(dw/PS); GH=Math.ceil(dh/PS);
   scene.width=GW+2; scene.height=GH+2; lightCv.width=(GW+2)*LK; lightCv.height=(GH+2)*LK;
   if(el.hud.classList.contains('show')) showHUD(true);
