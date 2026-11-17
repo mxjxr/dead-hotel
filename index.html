@@ -322,7 +322,7 @@ const ACH={
   allchars:{n:'TOUT LE MONDE',d:'Débloquer tous les personnages',r:20},
   escape:{n:'EVACUE',d:"S'échapper de l'hôtel par le toit (étage 30)",r:100}
 };
-const VERSION='2.0';   // à changer à chaque mise à jour publiée
+const VERSION='2.1';   // à changer à chaque mise à jour publiée
 const cv=$('#c'), ctx=cv.getContext('2d');
 const wrap=$('#wrap');
 const T=16, TAU=Math.PI*2;
@@ -1944,6 +1944,7 @@ function goToBase(){
   clearTransient();
   P.x=L.arrive.x; P.y=L.arrive.y; P.stairArm=false; P.inv=1; P.shieldT=0; P.dashT=0; P.steps=0;
   for(const d of defs) d.hp=d.max;
+  cleanOutside();
   const h0=P.hp; P.hp=G.furn.cot?P.maxHp:Math.min(P.maxHp,P.hp+Math.round(P.maxHp*.5));   // on ne se soigne qu'à la base
   const gain=Math.round(P.hp-h0); if(gain>0) setTimeout(()=>toast('SOINS : +'+gain+' PV'),700);
   if(G.furn.steeldoor&&!defs.some(d=>d.type==='steeldoor')){const dd=L.baseRoom.door, sd=placeDef('steeldoor',dd.x,dd.y); sd.solid=false; sd.zOnly=true; sd.hp=sd.max=600;}
@@ -2345,9 +2346,7 @@ function canBuild(tx,ty,type){
   return true;
 }
 function buildable(i){
-  const v=map[i];
-  if(v===7||v===8) return true;
-  return v===2&&L.rooms[roomOf[i]]===L.baseRoom&&!L.reserved.has(i);
+  return map[i]===2&&L.rooms[roomOf[i]]===L.baseRoom&&!L.reserved.has(i);   // seulement dans la salle de sécurité
 }
 function tapBuild(wx,wy){
   const tx=Math.floor(wx/T), ty=Math.floor(wy/T); if(tx<0||ty<0||tx>=MW||ty>=MH) return;
@@ -3268,7 +3267,8 @@ function render(){
   const mw=MW*T, mh=MH*T, t=performance.now()/1000;
   const tg=state==='build'?G.bcam:(state==='title'||!P)?demo:P;
   let cx=mw<=GW?(mw-GW)/2:clamp(tg.x-GW/2,0,mw-GW);
-  let cy=mh<=GH?(mh-GH)/2+(state==='build'?bOffY:0):clamp(tg.y-GH/2,0,mh-GH);
+  const by=state==='build'?bOffY:0;
+  let cy=mh<=GH?(mh-GH)/2+by:clamp(tg.y+by-GH/2,0,mh-GH);
   if(G&&G.shake>0&&state!=='title'&&state!=='build'){cx+=rnd(-1,1)*G.shake; cy+=rnd(-1,1)*G.shake;}
   cx=Math.round(cx*PS)/PS; cy=Math.round(cy*PS)/PS;
   cam.x=cx; cam.y=cy;
@@ -3677,9 +3677,19 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 
 /* ================= Construction ================= */
+// anciennes défenses posées hors de la salle de sécurité : retirées et remboursées
+function cleanOutside(){
+  let n=0;
+  for(const d of defs.slice()){
+    if(d.type==='steeldoor'||d.type==='surv'||L.rooms[roomOf[d.ty*MW+d.tx]]===L.baseRoom) continue;
+    removeDef(d); n+=DEF[d.type].cost;
+  }
+  if(n){G.scrap+=n; setTimeout(()=>toast('DEFENSES HORS DE LA SALLE RETIREES : +'+n+' FERRAILLE'),1200);}
+}
 function openBuild(){
   if(state!=='play'||L.kind!=='base') return;
-  state='build'; G.bcam={x:P.x,y:P.y}; joyReset(); renderTools(); tip('power');
+  cleanOutside(); const br=L.baseRoom;
+  state='build'; G.bcam={x:(br.x+br.w/2+.5)*T,y:(br.y+br.h/2)*T}; joyReset(); renderTools(); tip('power');
   $('#build').classList.add('show'); updateButtons(); resize();
 }
 function closeBuild(){if(state!=='build') return; state='play'; $('#build').classList.remove('show'); last=performance.now(); updateButtons(); resize();}
@@ -3831,9 +3841,9 @@ function resize(){
   cv.width=dw; cv.height=dh;
   PS=Math.max(2,Math.round(dw/144)); bOffY=0;
   if(state==='build'&&L&&L.kind==='base'){
-    // vue d'ensemble : toute la base tient entre le HUD et le menu de construction
-    const pr=$('#pauseBtn').getBoundingClientRect(), hudH=pr.bottom-r.top+8, panH=$('#build').getBoundingClientRect().height;
-    PS=Math.min(dw/(MW*T+4),(dh-(hudH+panH)*DPR)/(MH*T+4));
+    // la salle de sécurité (porte comprise) tient entre le HUD et le menu de construction
+    const pr=$('#pauseBtn').getBoundingClientRect(), hudH=pr.bottom-r.top+8, panH=$('#build').getBoundingClientRect().height, br=L.baseRoom;
+    PS=Math.min(dw/((br.w+2)*T),(dh-(hudH+panH)*DPR)/((br.h+1)*T));
     bOffY=(panH-hudH)/2*DPR/PS;
   }
   GW=Math.ceil(dw/PS); GH=Math.ceil(dh/PS);
@@ -3877,7 +3887,7 @@ window.__DH={get state(){return state;},get P(){return P;},get G(){return G;},ge
   yes:()=>$('#askYes').click(),furn:k=>buyFurn(k),get coins(){return coins;},
   spawn:(t,x,y)=>{const z=makeZombie(t,x,y,G.floor); zombies.push(z); return z;},get eshotsN(){return eshots.length;},shoot:(x,y)=>fire({x,y}),inWater:(x,y)=>inWater(x,y),get mus(){return {step:MUS.step,int:MUS.int,on:!!MUS.nodes,ac:AC&&AC.state};},
   prof:(n)=>{let u=0,r=0; for(let i=0;i<n;i++){let t0=performance.now(); if(state==='play') update(1/60); let t1=performance.now(); render(); let t2=performance.now(); u+=t1-t0; r+=t2-t1;} return {upd:+(u/n).toFixed(2),ren:+(r/n).toFixed(2),z:zombies.length,parts:parts.length};},
-  tick:(n,dt=1/60)=>{const t0=performance.now(); for(let i=0;i<n&&state==='play';i++) update(dt); return performance.now()-t0;},solid:(tx,ty)=>solidT(tx,ty,false),recalc:()=>recalcDmg()};
+  tick:(n,dt=1/60)=>{const t0=performance.now(); for(let i=0;i<n&&state==='play';i++) update(dt); return performance.now()-t0;},solid:(tx,ty)=>solidT(tx,ty,false),recalc:()=>recalcDmg(),forcePlace:(t,x,y)=>placeDef(t,x,y)};
 // ---------- sauvegarde automatique de la partie (IndexedDB, reprise à l'identique) ----------
 const DB={
   open(){return this.p||(this.p=new Promise((ok,ko)=>{const r=indexedDB.open('deadhotel',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>ok(r.result); r.onerror=()=>ko(r.error);}));},
